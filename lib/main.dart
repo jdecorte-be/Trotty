@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'package:rounded_loading_button/rounded_loading_button.dart';
+import 'package:progress_state_button/iconed_button.dart';
+import 'package:progress_state_button/progress_button.dart';
 import 'package:flutter/material.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -13,19 +14,49 @@ const double pin_visible_pos = 0;
 const double pin_invisible_pos = -500;
 
 const String query = r"""
-        query{
-          vehicles(lat:50.845939, lng: 4.358228)
-          {
-            id
-            provider
-            {
-              name
-            }
-            type
-            lat
-            lng
-          }
-        }
+query{
+  vehicles(lat:50.845939, lng: 4.358228)
+  {
+    id
+    publicId
+    provider 
+    {
+      name
+    }
+    type
+    lat
+    lng
+    pricing
+    {
+      currency
+      vat
+      unlock
+      perKm
+      {
+        start
+        end
+        interval
+        price
+      }
+      perMin
+      {
+        start
+        end
+        interval
+        price
+      }
+      perMinPause
+      {
+        start
+        end
+        interval
+        price
+      }
+      includeVat
+      
+		}
+  }
+}
         """;
 
 void main() async {
@@ -47,6 +78,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Flutter Demo',
       theme: ThemeData(
         primarySwatch: Colors.blue,
@@ -99,21 +131,29 @@ class MapScreen extends State<_MapScreen> {
 
   double pinPillPos = pin_invisible_pos;
   String provider = "Default";
-  static const _initialCameraPosition = CameraPosition(
-    target: LatLng(50.845939, 4.358228),
-    zoom: 15,
+  double prices = 0;
+
+  Geolocator geolocator = Geolocator();
+  Position userLocation = Position(
+    speedAccuracy: 0,
+    altitude: 0,
+    longitude: 4.358228,
+    latitude: 50.845939,
+    speed: 0,
+    heading: 0,
+    timestamp: DateTime.now(),
+    accuracy: 0,
   );
-  Completer<GoogleMapController> _controller = Completer();
+
+  get mapStyle => 'assets/light.json';
+  late GoogleMapController _controller;
   Set<Marker> _markers = Set<Marker>();
 
-// Button action and controller
-  final RoundedLoadingButtonController _btnController =
-      RoundedLoadingButtonController();
-
-  void _doSomething() async {
-    Timer(Duration(seconds: 1), () {
-      _btnController.success();
-    });
+  _getLocation() async {
+    var currentLocation = await Geolocator.getCurrentPosition();
+    _controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
+        zoom: 17,
+        target: LatLng(currentLocation.latitude, currentLocation.longitude))));
   }
 
   @override
@@ -123,17 +163,18 @@ class MapScreen extends State<_MapScreen> {
         children: [
           Positioned.fill(
             child: GoogleMap(
-              myLocationButtonEnabled: true,
-              initialCameraPosition: _initialCameraPosition,
+              myLocationButtonEnabled: false,
+              myLocationEnabled: true,
+              initialCameraPosition: CameraPosition(
+                target: LatLng(userLocation.latitude, userLocation.longitude),
+                zoom: 17,
+              ),
               markers: _markers,
-              onTap: (LatLng loc) {
-                setState(() {
-                  this.pinPillPos = pin_invisible_pos;
-                });
-              },
-              onMapCreated: (GoogleMapController controller) {
-                _controller.complete(controller);
-
+              onMapCreated: (GoogleMapController controller) async {
+                _controller = controller;
+                String style =
+                    await DefaultAssetBundle.of(context).loadString(mapStyle);
+                controller.setMapStyle(style);
                 showPinsMap();
               },
             ),
@@ -144,78 +185,90 @@ class MapScreen extends State<_MapScreen> {
               left: 0,
               right: 0,
               bottom: this.pinPillPos,
-              child: Container(
-                  // decoration: BoxDecoration(
-                  //   borderRadius: BorderRadius.only(
-                  //       topLeft: Radius.circular(30),
-                  //       topRight: Radius.circular(30)),
-                  //   color: Color.fromARGB(255, 30, 29, 36),
-                  // ),
-                  child: Column(
-                children: [
-                  SlidingUpPanel(
-                      maxHeight: 275,
-                      borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(30),
-                          topRight: Radius.circular(30)),
-                      color: Color.fromARGB(255, 30, 29, 36),
-                      panel: Container(
-                          child: Row(children: [
-                        SizedBox(width: 20),
-                        ClipRRect(
-                            borderRadius: BorderRadius.circular(15),
-                            child: Image.asset('assets/bird.jpeg',
-                                width: 125, height: 125)),
-                        SizedBox(width: 20),
-                        Column(children: [
-                          SizedBox(height: 50),
-                          Text("$provider",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              )),
+              child: SlidingUpPanel(
+                  maxHeight: 275,
+                  borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(30),
+                      topRight: Radius.circular(30)),
+                  color: Color.fromARGB(255, 29, 29, 36),
+                  panel: Column(
+                    children: [
+                      SizedBox(height: 7),
+                      ClipRRect(
+                          borderRadius: BorderRadius.circular(100),
+                          child: Container(
+                              width: 50,
+                              height: 5,
+                              color: Color.fromARGB(199, 255, 255, 255))),
+                      Container(
+                        margin: EdgeInsets.only(top: 20, left: 20, right: 20),
+                        child: Row(children: [
+                          ClipRRect(
+                              borderRadius: BorderRadius.circular(15),
+                              child: Image.asset('assets/bird.jpeg',
+                                  width: 125, height: 125)),
+                          SizedBox(width: 20),
+                          Container(
+                            child: Column(children: [
+                              Text("$provider",
+                                  textAlign: TextAlign.left,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  )),
+                              Text("$prices" + "€/min",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  )),
+                            ]),
+                          )
                         ]),
-                      ]))),
-                  // Container(
-                  //   height: 250,
-                  //   child: Row(
-                  //     children: [
-                  //       SizedBox(width: 20),
-                  //       ClipRRect(
-                  //           borderRadius: BorderRadius.circular(15),
-                  //           child: Image.asset('assets/bird.jpeg',
-                  //               width: 125, height: 125)),
-                  //       SizedBox(width: 20),
-                  //       Column(
-                  //         children: [
-                  //           SizedBox(height: 20),
-                  //           Expanded(
-                  //               child: Column(children: [
-                  //             Text("$provider",
-                  //                 style: TextStyle(
-                  //                   color: Colors.white,
-                  //                   fontSize: 16,
-                  //                 )),
-                  //             Text("test",
-                  //                 style: TextStyle(
-                  //                   color: Colors.white,
-                  //                   fontSize: 12,
-                  //                 )),
-                  //           ])),
-                  //         ],
-                  //       ),
-                  //     ],
-                  //   ),
-                  // ),
-                  // RoundedLoadingButton(
-                  //   resetAfterDuration: true,
-                  //   child:
-                  //       Text('Book Now', style: TextStyle(color: Colors.white)),
-                  //   controller: _btnController,
-                  //   onPressed: _doSomething,
-                  // )
-                ],
-              ))),
+                      ),
+                      Container(
+                        margin: EdgeInsets.only(top: 40, left: 20, right: 20),
+                        child: ProgressButton(
+                          stateWidgets: {
+                            ButtonState.idle: Text(
+                              "Book Now",
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                            ButtonState.loading: Text(
+                              "Loading",
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                            ButtonState.fail: Text(
+                              "Fail",
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                            ButtonState.success: Text(
+                              "Success",
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500),
+                            )
+                          },
+                          stateColors: {
+                            ButtonState.idle:
+                                Color.fromARGB(255, 133, 174, 144),
+                            ButtonState.loading: Colors.blue.shade300,
+                            ButtonState.fail: Colors.red.shade300,
+                            ButtonState.success: Colors.green.shade400,
+                          },
+                          onPressed: () {
+                            _getLocation();
+                          },
+                          state: ButtonState.idle,
+                        ),
+                      )
+                    ],
+                  ))),
         ],
       ),
     );
@@ -225,7 +278,6 @@ class MapScreen extends State<_MapScreen> {
     // ? Add all pins on map
     setState(() {
       for (int i = 0; i < list['vehicles'].length; i++) {
-        print(this.list['vehicles'][i]['provider']['name']);
         _markers.add(Marker(
             markerId: MarkerId(this.list['vehicles'][i]['id']),
             position: LatLng(this.list['vehicles'][i]['lat'],
@@ -233,6 +285,11 @@ class MapScreen extends State<_MapScreen> {
             onTap: () {
               setState(() {
                 provider = this.list['vehicles'][i]['provider']['name'];
+                if (this.list['vehicles'][i]['pricing'] != null &&
+                    this.list['vehicles'][i]['pricing']['perMin'] != null) {
+                  prices =
+                      this.list['vehicles'][i]['pricing']['perMin'][0]['price'];
+                }
                 this.pinPillPos = pin_visible_pos;
               });
             }));
